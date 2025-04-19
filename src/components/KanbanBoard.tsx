@@ -1,11 +1,18 @@
 "use client"
 import { Column, Id } from "@/types";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import ColumnContainer from "./ColumnContainer";
-import { DndContext } from "@dnd-kit/core";
+import { DndContext, DragEndEvent, DragOverlay } from "@dnd-kit/core";
+import { arrayMove, SortableContext } from "@dnd-kit/sortable";
+import { createPortal } from "react-dom";
 
 function KanbanBoard() {
   const [columns, setColumns] = useState<Column[]>([]);
+
+  const [activeColumn, setActiveColumn] = useState<Column | null>(null);
+  const columnsId = useMemo(() => {
+    return columns.map(column => column.id);
+  }, [columns]);
 
   function deleteColumn(id: Id) {
     setColumns(columns.filter(column => column.id !== id));
@@ -21,6 +28,36 @@ function KanbanBoard() {
     setColumns([...columns, columnToAdd]);
     console.log(columns);
   }
+
+  function onDragStart(event: any) {
+    console.log(event);
+
+    if (event.active.data.current.type === "Column") {
+      setActiveColumn(event.active.data.current.column);
+      return
+    }
+  }
+  function onDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeColumnId = active.id;
+    const overColumnId = over.id;
+
+    if (activeColumnId === overColumnId) return;
+
+    setColumns((columns) => {
+      const activeColumnIndex = columns.findIndex(
+        (col) => col.id === activeColumnId
+      );
+
+      const overColumnIndex = columns.findIndex(
+        (col) => col.id === overColumnId
+      );
+
+      return arrayMove(columns, activeColumnIndex, overColumnIndex);
+    });
+  }
   return (
     <div
       className="
@@ -35,13 +72,14 @@ function KanbanBoard() {
         px-[40px]
       "
     >
-      <DndContext>
-
+      <DndContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
         <div className="m-auto flex gap-4">
           <div className="flex gap-4">
-            {columns.map((col) => (
-              <ColumnContainer column={col} deleteColumn={deleteColumn} key={col.id} />
-            ))}
+            <SortableContext items={columnsId}>
+              {columns.map((col) => (
+                <ColumnContainer column={col} deleteColumn={deleteColumn} key={col.id} />
+              ))}
+            </SortableContext>
           </div>
           <button
             onClick={createColumn}
@@ -62,6 +100,18 @@ function KanbanBoard() {
             Add Column
           </button>
         </div>
+
+        {createPortal(
+          <DragOverlay>
+            {activeColumn && (
+              <ColumnContainer
+                column={activeColumn}
+                deleteColumn={deleteColumn}
+              />
+            )}
+          </DragOverlay>,
+          document.body
+        )}
       </DndContext>
     </div>
   );
